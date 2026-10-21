@@ -14,7 +14,7 @@ python -m pip install -r requirements.txt
 python -m uvicorn m1_demo.app:app --host 127.0.0.1 --port 8000
 ```
 
-在自己的电脑浏览器打开 `http://127.0.0.1:8000`，API 文档为 `/docs`。Windows 也可双击 `启动演示.bat`（首次运行需要联网安装依赖）。云端运行的地址不等于你电脑的本地地址；下载后在自己的电脑运行即可。
+在自己的电脑浏览器打开 `http://127.0.0.1:8000`，API 文档为 `/docs`。Windows 也可双击 `start.bat` 或 `启动演示.bat`（首次运行需要联网安装依赖）。云端运行的地址不等于你电脑的本地地址；下载后在自己的电脑运行即可。
 
 ```sh
 python -m unittest discover -s tests -v

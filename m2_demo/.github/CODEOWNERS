@@ -1,0 +1,11 @@
+# 替换为真实 GitHub 用户名后启用
+#
+# *               @team-lead
+# /backend/services/m1/  @member-a
+# /backend/services/m2/  @member-b
+# /backend/services/m3/  @member-c
+# /backend/shared/       @member-c
+# /frontend/             @member-c
+# /deploy/               @member-b
+# /.github/              @member-b
+# /docs/                 @team-lead

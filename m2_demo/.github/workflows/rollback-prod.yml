@@ -1,0 +1,46 @@
+# 生产回滚（模板）
+#
+# 选择一个已经发布过的 tag，在同一部署目录切回该版本并重启。
+# 前提：迁移采用向后兼容策略（expand/contract），否则不允许直接回滚 schema。
+
+name: rollback-prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要回滚到的 tag（例如 v0.5.0）"
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: rollback over ssh
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -eu
+            cd ${{ vars.DEPLOY_PATH }}
+            git fetch --all --tags
+            git checkout ${{ inputs.tag }}
+            docker compose -f deploy/compose.yml up -d --build
+            for i in $(seq 1 30); do
+              if curl -fsS http://localhost:8080/version >/dev/null; then exit 0; fi
+              sleep 2
+            done
+            exit 1
+
+      - name: rollback summary
+        run: |
+          echo "rolled back to: ${{ inputs.tag }}" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,56 @@
+# 生产发布（模板）
+#
+# 启用方式：
+#   1. 在 GitHub Environments 新建 production，配置 Required reviewers
+#   2. 在仓库 Variables 设置 DEPLOY_ENABLED=true、DEPLOY_PATH=/srv/selfstudy
+#   3. 在仓库 Secrets 设置 DEPLOY_HOST、DEPLOY_USER、DEPLOY_SSH_KEY
+#
+# 发布流程：打 tag vX.Y.Z → 人工审批 → 备份数据库 → 迁移 → 部署 → 健康检查
+# 回滚见 rollback-prod.yml
+
+name: deploy-prod
+
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: deploy over ssh
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -eu
+            cd ${{ vars.DEPLOY_PATH }}
+            git fetch --all --tags
+            git checkout ${{ github.ref_name }}
+            # 1. 备份生产库（示例）
+            docker compose -f deploy/compose.yml exec -T postgres \
+              pg_dump -U app m2_db > /srv/backup/m2-$(date +%Y%m%d-%H%M%S).sql
+            # 2. 部署（入口脚本执行 alembic upgrade head）
+            docker compose -f deploy/compose.yml up -d --build
+            # 3. 健康检查
+            for i in $(seq 1 30); do
+              if curl -fsS http://localhost:8080/version >/dev/null; then exit 0; fi
+              sleep 2
+            done
+            exit 1
+
+      - name: release summary
+        run: |
+          echo "release tag: ${{ github.ref_name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "commit: ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "approved environment: production" >> "$GITHUB_STEP_SUMMARY"

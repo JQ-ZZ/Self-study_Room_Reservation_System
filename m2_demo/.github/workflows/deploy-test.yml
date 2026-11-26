@@ -1,0 +1,54 @@
+# 测试环境自动部署（模板）
+#
+# 启用方式：
+#   1. 在仓库 Variables 设置 DEPLOY_ENABLED=true、DEPLOY_PATH=/srv/selfstudy
+#   2. 在仓库 Secrets 设置 DEPLOY_HOST、DEPLOY_USER、DEPLOY_SSH_KEY
+#   3. 服务器提前 clone 仓库并准备好 .env
+#
+# 正式方案见 docs/adr/0005-environments-and-release.md
+
+name: deploy-test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-test
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: test
+    steps:
+      - name: deploy over ssh
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -eu
+            cd ${{ vars.DEPLOY_PATH }}
+            git fetch --all --tags
+            git checkout ${{ github.sha }}
+            docker compose -f deploy/compose.yml up -d --build
+            for i in $(seq 1 30); do
+              if curl -fsS http://localhost:8080/health >/dev/null; then
+                echo "test environment healthy"
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "health check failed"
+            docker compose -f deploy/compose.yml logs --no-color
+            exit 1
+
+      - name: record version
+        if: success()
+        run: |
+          echo "deployed commit: ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "deployed by: ${{ github.actor }}" >> "$GITHUB_STEP_SUMMARY"
